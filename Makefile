@@ -1,5 +1,5 @@
 APP := adobe-fonts-dump
-VERSION ?= 0.0.0
+VERSION ?= 0.1.0
 BUILD_DIR := build
 OUTPUT ?= $(BUILD_DIR)/$(APP)
 BINARY ?= $(OUTPUT)

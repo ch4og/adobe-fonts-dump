@@ -16,7 +16,7 @@ import (
 //go:embed assets/logo.png
 var logo []byte
 
-const version = "0.0.0"
+const version = "0.1.0"
 
 func main() {
 	a := app.New()
