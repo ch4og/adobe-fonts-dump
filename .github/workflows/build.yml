@@ -1,0 +1,100 @@
+name: Build executables
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }} ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            architecture: x64
+            output: adobe-fonts-ch4og-dump-windows-x64.exe
+            artifact: adobe-fonts-ch4og-dump-windows-x64
+          - runner: macos-14
+            platform: macos
+            architecture: arm64
+            output: adobe-fonts-ch4og-dump-macos-arm64
+            artifact: adobe-fonts-ch4og-dump-macos-arm64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Build executable
+        env:
+          CGO_ENABLED: "1"
+        shell: bash
+        run: |
+          make build OUTPUT="build/${{ matrix.output }}"
+          test -s "build/${{ matrix.output }}"
+
+      - name: Package macOS app
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          make package-macos \
+            BINARY="build/${{ matrix.output }}" \
+            APP_BUNDLE="build/AdobeFontsDump.app" \
+            DMG="build/${{ matrix.output }}.dmg"
+
+      - name: Upload Windows executable
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: build/${{ matrix.output }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload macOS app disk image
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: build/${{ matrix.output }}.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum -- * > SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "$GITHUB_REF_NAME" --generate-notes
